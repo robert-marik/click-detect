@@ -34,7 +34,7 @@ def create_bubble(x, y, text, color):
     # Na macOS může být potřeba: top.attributes("-alpha", 0.8)
     
     # Pozice (mírně posunutá od kurzoru, aby nepřekážela kliknutí)
-    top.geometry(f"+{{int(x+10)}}+{{int(y+10)}}")
+    top.geometry(f"+{int(x+10)}+{int(y+10)}")
     
     lbl = tk.Label(top, text=text, bg=color, fg=TEXT_COLOR, 
                    font=("Arial", 10, "bold"), padx=6, pady=3)
