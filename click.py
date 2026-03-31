@@ -43,7 +43,6 @@ def create_bubble(x, y, text, color):
     # Klíč k úspěchu: Okno se samo zničí po uplynutí času
     top.after(DISPLAY_MS, top.destroy)
 
-
 def check_queue(root):
     """Pravidelně kontroluje frontu, jestli někdo nekliknul."""
     try:
@@ -69,7 +68,6 @@ def check_queue(root):
     # Zkontroluj znovu za 10ms
     root.after(10, lambda: check_queue(root))
 
-
 def on_click(x, y, button, pressed):
     if pressed:
         # Rozlišení levého a pravého tlačítka
@@ -77,7 +75,6 @@ def on_click(x, y, button, pressed):
             msg_queue.put({'type': 'left', 'x': x, 'y': y})
         elif button == mouse.Button.right:
             msg_queue.put({'type': 'right', 'x': x, 'y': y})
-
 
 def on_scroll(x, y, dx, dy):
     # dy > 0 znamená scroll nahoru, dy < 0 znamená scroll dolů
