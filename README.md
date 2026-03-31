@@ -1,13 +1,14 @@
 # Click Detect 🖱️
 
-Jednoduchá Python aplikace pro vizuální a zvukovou indikaci kliknutí myši. Při každém kliknutí se zobrazí animovaná bublina s textem "Click!" a přehraje se zvukový efekt.
+Jednoduchá Python aplikace pro vizuální a zvukovou indikaci událostí myši. Při každé události se zobrazí animovaná bublina s popisem akce a přehraje se zvukový efekt.
 
 ## 🎯 Funkce
 
-- **Vizuální feedback**: Zobrazí barevnou bublinu při každém kliknutí myši
-- **Zvukový efekt**: Přehraje zvuk při každém kliknutí (pokud je dostupný soubor `click.wav`)
+- **Rozlišení tlačítek**: Zobrazí červenou bublinu „Click Left" pro levé a modrou bublinu „Click Right" pro pravé tlačítko
+- **Detekce scrollování**: Zobrazí zelenou bublinu „↑ Scroll Up" nebo „↓ Scroll Down" při otáčení kolečkem myši
+- **Zvukové efekty**: Přehraje `click.wav` při kliknutí a `scroll.wav` při scrollování (pokud jsou soubory dostupné)
 - **Neblokující**: Bubliny se automaticky zavírají a nepřekáží v práci
-- **Konfigurovatelné**: Barvy, čas zobrazení a zvukový soubor lze snadno upravit
+- **Konfigurovatelné**: Barvy, čas zobrazení a zvukové soubory lze snadno upravit
 
 ## 📋 Požadavky
 
@@ -42,15 +43,20 @@ Program běží na pozadí a sleduje všechna kliknutí myši. Pro ukončení st
 V souboru `click.py` můžete upravit následující konstanty:
 
 ```python
-SOUND_FILE = "click.wav"      # Cesta ke zvukovému souboru
-BUBBLE_COLOR = "#FF5733"       # Barva bubliny (hex kód)
-TEXT_COLOR = "white"           # Barva textu
+CLICK_SOUND_FILE = "click.wav"    # Zvuk při kliknutí myší
+SCROLL_SOUND_FILE = "scroll.wav"  # Zvuk při scrollování
+
+LEFT_CLICK_COLOR = "#FF5733"   # Barva bubliny pro levé tlačítko (červená)
+RIGHT_CLICK_COLOR = "#3498DB"  # Barva bubliny pro pravé tlačítko (modrá)
+SCROLL_COLOR = "#2ECC71"       # Barva bubliny pro scroll (zelená)
+
+TEXT_COLOR = "white"           # Barva textu v bublinách
 DISPLAY_MS = 400               # Jak dlouho bublina zůstane viditelná (ms)
 ```
 
-## 🎨 Vlastní zvukový efekt
+## 🎨 Vlastní zvukové efekty
 
-Aplikace očekává soubor `click.wav` ve stejné složce jako `click.py`. Můžete použít jakýkoliv WAV soubor nebo funkci zvuku úplně vypnout odstraněním souboru.
+Aplikace očekává soubory `click.wav` a `scroll.wav` ve stejné složce jako `click.py`. Můžete použít jakékoliv WAV soubory nebo funkci zvuku úplně vypnout odstraněním příslušných souborů.
 
 ## 🛠️ Technické detaily
 
@@ -67,7 +73,7 @@ Aplikace využívá:
 - Na některých systémech může být potřeba spustit s administrátorskými právy
 
 ### Zvuk se nepřehrává
-- Ověřte, že soubor `click.wav` existuje ve stejné složce jako skript
+- Ověřte, že soubory `click.wav` a `scroll.wav` existují ve stejné složce jako skript
 - Zkontrolujte, že váš systém podporuje přehrávání WAV souborů
 
 ### Bubliny se nezobrazují správně na macOS
