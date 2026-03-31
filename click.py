@@ -53,14 +53,14 @@ def check_queue(root):
             y = event_data['y']
             
             if event_type == 'left':
-                create_bubble(x, y, "Levý klik", LEFT_CLICK_COLOR)
+                create_bubble(x, y, "Click Left", LEFT_CLICK_COLOR)
                 play_sound(CLICK_SOUND_FILE)
             elif event_type == 'right':
-                create_bubble(x, y, "Pravý klik", RIGHT_CLICK_COLOR)
+                create_bubble(x, y, "Click Right", RIGHT_CLICK_COLOR)
                 play_sound(CLICK_SOUND_FILE)
             elif event_type == 'scroll':
                 direction = event_data['direction']
-                text = "↑ Nahoru" if direction > 0 else "↓ Dolů"
+                text = "↑ Scroll Up" if direction > 0 else "↓ Scroll Down"
                 create_bubble(x, y, text, SCROLL_COLOR)
                 play_sound(SCROLL_SOUND_FILE)
     except queue.Empty:
