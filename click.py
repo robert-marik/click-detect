@@ -29,6 +29,7 @@ msg_queue = queue.Queue()
 pygame.mixer.init()
 
 pressed_modifiers = set()
+pressed_modifier_keys = {}  # Trackuje konkreetni klice (shift_l, shift_r, ctrl_l, ctrl_r, ...)
 
 typed_chars = []
 overlay_window = None
@@ -63,6 +64,20 @@ def modifier_name(key):
     if key in {keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r}:
         return "Cmd"
     return None
+
+
+def get_active_modifiers():
+    """Vraci sadu aktivnich modifikatoru ve spravnem poradi."""
+    modifiers = set()
+    if any(pressed_modifier_keys.get(k) for k in [keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]):
+        modifiers.add("Ctrl")
+    if any(pressed_modifier_keys.get(k) for k in [keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r]):
+        modifiers.add("Alt")
+    if any(pressed_modifier_keys.get(k) for k in [keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r]):
+        modifiers.add("Shift")
+    if any(pressed_modifier_keys.get(k) for k in [keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r]):
+        modifiers.add("Cmd")
+    return modifiers
 
 
 def normalized_modifier_order(modifiers):
@@ -177,7 +192,7 @@ def create_bubble(x, y, text, color):
 
 def check_queue(root):
     """Pravidelně kontroluje frontu, jestli někdo nekliknul."""
-    global last_key_event_at
+    global last_key_event_at, typed_chars
 
     now = time.time()
     try:
@@ -242,9 +257,7 @@ def on_key_press(key):
     global typed_chars, last_key_event_at
     
     if is_modifier_key(key):
-        name = modifier_name(key)
-        if name:
-            pressed_modifiers.add(name)
+        pressed_modifier_keys[key] = True
         return
 
     # Backspace: vždy smazat poslední znak, bez ohledu na aktivní modifikátory.
@@ -252,35 +265,49 @@ def on_key_press(key):
     #  by uvíznutý AltGr zablokoval mazání.)
     if key == keyboard.Key.backspace:
         msg_queue.put({'type': 'key_backspace', 'x': 0, 'y': 0})
+        for k in pressed_modifier_keys:
+            pressed_modifier_keys[k] = False
         return
 
     key_text_for_combo = combo_key_text(key)
     if not key_text_for_combo:
         return
 
-    modifiers = normalized_modifier_order(pressed_modifiers)
+    modifiers = get_active_modifiers()
     shift_only = modifiers and all(mod == "Shift" for mod in modifiers)
 
     # Shift + znak je psani (napr. A, :, ?), ne klavesova zkratka.
     if modifiers and not shift_only:
-        combo = "+".join(modifiers + [key_text_for_combo])
+        combo = "+".join(normalized_modifier_order(modifiers) + [key_text_for_combo])
         msg_queue.put({'type': 'key_combo', 'text': combo, 'x': 0, 'y': 0})
+        for k in pressed_modifier_keys:
+            pressed_modifier_keys[k] = False
         return
 
     plain_text = plain_key_text(key)
     if plain_text:
         msg_queue.put({'type': 'key_plain', 'text': plain_text, 'x': 0, 'y': 0})
+    
+    # Reset modifikatoru po zpracovani klavesy
+    for k in pressed_modifier_keys:
+        pressed_modifier_keys[k] = False
 
 
 def on_key_release(key):
     if is_modifier_key(key):
-        name = modifier_name(key)
-        if name in pressed_modifiers:
-            pressed_modifiers.remove(name)
+        pressed_modifier_keys[key] = False
 
 # --- HLAVNÍ ČÁST PROGRAMU ---
 root = tk.Tk()
 root.withdraw()
+
+# Inicializuj pressed_modifier_keys pro vsechny varianty
+for key_variant in [keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r,
+                    keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
+                    keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r,
+                    keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r]:
+    pressed_modifier_keys[key_variant] = False
+
 create_overlay(root)
 
 # Spuštění sledování myši v pozadí (Daemon=True zajistí vypnutí s programem)
