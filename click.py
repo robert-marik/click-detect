@@ -6,6 +6,7 @@ import pygame
 import queue
 import time
 import os
+from PIL import Image, ImageDraw, ImageFont, ImageTk, ImageColor
 
 # --- KONFIGURACE ---
 CLICK_SOUND_FILE = "click.wav"
@@ -17,13 +18,16 @@ LEFT_CLICK_COLOR = "#FF5733"   # Červená pro levé tlačítko
 RIGHT_CLICK_COLOR = "#3498DB"  # Modrá pro pravé tlačítko
 SCROLL_COLOR = "#2ECC71"       # Zelená pro kolečko
 
-TEXT_COLOR = "white"
+TEXT_COLOR = "#FFFFFF"
 DISPLAY_MS = 400  # Jak dlouho bublina zůstane (ms)
 MAX_TYPED_CHARS = 15
 OVERLAY_IDLE_SECONDS = 5.0
 OVERLAY_BG_COLOR = "#FFD400"
 OVERLAY_TEXT_COLOR = "black"
-FONTSIZE=20
+FONTSIZE = 64
+FONTSIZE_CLICK = 16
+FONTNAME = "Monaco"  # Modern monospace font
+FONT_STYLE = "bold"
 
 # Inicializace fronty a zvuku ěšě+š3213
 msg_queue = queue.Queue()
@@ -136,26 +140,46 @@ def create_overlay(root):
 
     overlay_text_var = tk.StringVar(value="")
 
-    text_label = tk.Label(
-        top,
-        textvariable=overlay_text_var,
-        bg=OVERLAY_BG_COLOR,
-        fg=OVERLAY_TEXT_COLOR,
-        font=("Arial", FONTSIZE, "bold"),
-        anchor="w",
-        justify="left",
-        padx=8,
-        pady=6,
-    )
-    text_label.pack(fill="x")
+    # Vytvořit frame pro bubliny klávesy
+    frame = tk.Frame(top, bg=OVERLAY_BG_COLOR)
+    frame.pack(fill="both", expand=True)
+    
+    # Uložit frame do overlay_window pro pozdější přístup k UI prvkům
+    top.bubble_frame = frame
+    top.current_bubbles = []
 
     overlay_window = top
 
 
 def show_overlay_text(text):
-    if overlay_window is None or overlay_text_var is None:
+    if overlay_window is None:
         return
-    overlay_text_var.set(text)
+    
+    # Vyčistit staré bubliny
+    for widget in overlay_window.current_bubbles:
+        widget.destroy()
+    overlay_window.current_bubbles.clear()
+    
+    if not text:
+        overlay_window.withdraw()
+        return
+    
+    # Vytvořit bubliny pro každý řádek/obsah
+    # Rozdělíme text na jednotlivé znaky/kombinace pro hezčí zobrazení
+    pil_img = create_rounded_bubble_image(text, OVERLAY_BG_COLOR, OVERLAY_TEXT_COLOR, FONTSIZE, FONTNAME)
+    photo = ImageTk.PhotoImage(pil_img)
+    
+    lbl = tk.Label(
+        overlay_window.bubble_frame,
+        image=photo,
+        bg=OVERLAY_BG_COLOR,
+        bd=0,
+        highlightthickness=0
+    )
+    lbl.image = photo  # Udržet referenci
+    lbl.pack(side="left", padx=14, pady=14)
+    
+    overlay_window.current_bubbles.append(lbl)
     overlay_window.deiconify()
 
 
@@ -163,6 +187,12 @@ def hide_overlay():
     global last_key_event_at
     if overlay_window is None:
         return
+    
+    # Vyčistit bubliny
+    for widget in overlay_window.current_bubbles:
+        widget.destroy()
+    overlay_window.current_bubbles.clear()
+    
     overlay_window.withdraw()
     # Reset historie znaků, aby se po skryti zobrazy jen nove znaky.
     typed_chars.clear()
@@ -174,19 +204,84 @@ def play_sound(sound_file):
     except:
         pass # Ignorovat, pokud soubor chybí
 
+def create_rounded_bubble_image(text, bg_color, fg_color, fontsize, fontname):
+    """Vytvoří zakulacenou bublinu jako PIL Image."""
+    # Konverze barev z hex/jmen na RGB
+    try:
+        bg_rgb = ImageColor.getrgb(bg_color)
+    except:
+        bg_rgb = (255, 212, 0)  # Fallback na žlutou
+    
+    try:
+        fg_rgb = ImageColor.getrgb(fg_color)
+    except:
+        fg_rgb = (255, 255, 255)  # Fallback na bílou
+    
+    # Vytvořit dočasný obrázek pro měření textu
+    temp_img = Image.new('RGBA', (1, 1))
+    temp_draw = ImageDraw.Draw(temp_img)
+    
+    try:
+        font = ImageFont.truetype(f"/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", fontsize)
+    except:
+        try:
+            font = ImageFont.truetype(f"/System/Library/Fonts/Monaco.dfont", fontsize)
+        except:
+            font = ImageFont.load_default()
+    
+    # Měření textu - dostaneme přesný bounding box včetně ascendersů a descenderů
+    bbox = temp_draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    bbox_top_offset = bbox[1]  # Offset horního okraje (může být negativní pro ascendery)
+    
+    # Rozměry bubliny s padding
+    padding_x = 12
+    padding_y = 10
+    radius = 8
+    
+    bubble_width = text_width + padding_x * 2
+    bubble_height = text_height + padding_y * 2
+    
+    # Vytvořit finální obrázek s průhledností
+    img = Image.new('RGBA', (bubble_width, bubble_height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    # Nakreslit zakulacenou bublinu - obdélník s zakulacenými rohy
+    draw.rounded_rectangle(
+        [(0, 0), (bubble_width - 1, bubble_height - 1)],
+        radius=radius,
+        fill=bg_rgb,
+        outline=None
+    )
+    
+    # Nakreslit text - vycentrovat vertikálně s ohledem na ascendery/descendery
+    # bbox_top_offset korriguje odsazení tak, aby text fit správně do bubliny
+    text_x = padding_x - bbox[0]
+    text_y = padding_y - bbox_top_offset
+    draw.text((text_x, text_y), text, font=font, fill=fg_rgb)
+    
+    return img
+
 def create_bubble(x, y, text, color):
-    """Vytvoří bublinu, která se sama zničí."""
+    """Vytvoří bublinu se zakulacenými rohy, která se sama zničí."""
     top = tk.Toplevel()
     top.overrideredirect(True)      # Bez okrajů
     top.attributes("-topmost", True) # Vždy navrchu
-    # Na macOS může být potřeba: top.attributes("-alpha", 0.8)
+    
+    # Vytvořit PIL obrázek se zakulacenými rohy
+    pil_img = create_rounded_bubble_image(text, color, TEXT_COLOR, FONTSIZE_CLICK, FONTNAME)
+    
+    # Převést PIL Image na PhotoImage pro Tkinter
+    photo = ImageTk.PhotoImage(pil_img)
+    
+    # Vytvořit label s obrázkem
+    lbl = tk.Label(top, image=photo, bd=0, highlightthickness=0)
+    lbl.image = photo  # Udržet referenci!
+    lbl.pack()
     
     # Pozice (mírně posunutá od kurzoru, aby nepřekážela kliknutí)
     top.geometry(f"+{int(x+10)}+{int(y+10)}")
-    
-    lbl = tk.Label(top, text=text, bg=color, fg=TEXT_COLOR, 
-                   font=("Arial", FONTSIZE, "bold"), padx=6, pady=3)
-    lbl.pack()
     
     # Klíč k úspěchu: Okno se samo zničí po uplynutí času
     top.after(DISPLAY_MS, top.destroy)
