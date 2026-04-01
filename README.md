@@ -1,12 +1,15 @@
 # Click Detect 🖱️
 
-Jednoduchá Python aplikace pro vizuální a zvukovou indikaci událostí myši. Při každé události se zobrazí animovaná bublina s popisem akce a přehraje se zvukový efekt.
+Jednoduchá Python aplikace pro vizuální a zvukovou indikaci událostí myši a klávesnice. Při událostech myši se zobrazí animovaná bublina s popisem akce a přehraje se zvukový efekt, stisky kláves se zobrazují v levém horním rohu.
 
 ## 🎯 Funkce
 
 - **Rozlišení tlačítek**: Zobrazí červenou bublinu „Click Left" pro levé a modrou bublinu „Click Right" pro pravé tlačítko
 - **Detekce scrollování**: Zobrazí zelenou bublinu „↑ Scroll Up" nebo „↓ Scroll Down" při otáčení kolečkem myši
-- **Zvukové efekty**: Přehraje `click.wav` při kliknutí a `scroll.wav` při scrollování (pokud jsou soubory dostupné)
+- **Klávesové zobrazení v jednom okně**: V levém horním rohu se ve stejném panelu zobrazuje buď kombinace (`Ctrl+C`, `Ctrl+V`), nebo běžně psané znaky
+- **Psaný text**: Při stisku kláves bez modifikátorů (včetně `Shift` pro `A`, `:`, `?` atd.) zobrazuje posledních 15 znaků
+- **Automatické skrytí**: Pokud 5 sekund není stisk klávesy, panel se úplně skryje (nezůstane ani prázdné okno)
+- **Zvukové efekty**: Přehraje `click.wav` při kliknutí nebo stisku klávesy a `scroll.wav` při scrollování (pokud jsou soubory dostupné)
 - **Neblokující**: Bubliny se automaticky zavírají a nepřekáží v práci
 - **Konfigurovatelné**: Barvy, čas zobrazení a zvukové soubory lze snadno upravit
 
@@ -36,7 +39,7 @@ Spusťte program příkazem:
 python click.py
 ```
 
-Program běží na pozadí a sleduje všechna kliknutí myši. Pro ukončení stiskněte `Ctrl+C` v terminálu.
+Program běží na pozadí a sleduje kliknutí myši i stisky kláves. Pro ukončení stiskněte `Ctrl+C` v terminálu.
 
 ## ⚙️ Konfigurace
 
@@ -45,6 +48,7 @@ V souboru `click.py` můžete upravit následující konstanty:
 ```python
 CLICK_SOUND_FILE = "click.wav"    # Zvuk při kliknutí myší
 SCROLL_SOUND_FILE = "scroll.wav"  # Zvuk při scrollování
+KEY_SOUND_FILE = "click.wav"      # Krátké tuknutí při stisku klávesy
 
 LEFT_CLICK_COLOR = "#FF5733"   # Barva bubliny pro levé tlačítko (červená)
 RIGHT_CLICK_COLOR = "#3498DB"  # Barva bubliny pro pravé tlačítko (modrá)
@@ -52,6 +56,7 @@ SCROLL_COLOR = "#2ECC71"       # Barva bubliny pro scroll (zelená)
 
 TEXT_COLOR = "white"           # Barva textu v bublinách
 DISPLAY_MS = 400               # Jak dlouho bublina zůstane viditelná (ms)
+MAX_TYPED_CHARS = 15           # Počet zobrazených znaků bez modifikátorů
 ```
 
 ## 🎨 Vlastní zvukové efekty
@@ -62,7 +67,7 @@ Aplikace očekává soubory `click.wav` a `scroll.wav` ve stejné složce jako `
 
 Aplikace využívá:
 - **tkinter**: Pro vytváření grafických bublin
-- **pynput**: Pro sledování událostí myši na úrovni systému
+- **pynput**: Pro sledování událostí myši i klávesnice na úrovni systému
 - **pygame**: Pro přehrávání zvukových efektů
 - **threading & queue**: Pro bezpečnou komunikaci mezi vlákny
 

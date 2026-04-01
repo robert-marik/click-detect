@@ -1,12 +1,18 @@
+# pokus o jednoduchou vizualizci kliků.
+
 import tkinter as tk
-from pynput import mouse
+from pynput import mouse, keyboard
 import pygame
-import threading
 import queue
+import time
+import os
+import subprocess
+import sys
 
 # --- KONFIGURACE ---
 CLICK_SOUND_FILE = "click.wav"
 SCROLL_SOUND_FILE = "scroll.wav"
+KEY_SOUND_FILE = "click.wav"
 
 # Barvy pro různé typy událostí
 LEFT_CLICK_COLOR = "#FF5733"   # Červená pro levé tlačítko
@@ -15,10 +21,187 @@ SCROLL_COLOR = "#2ECC71"       # Zelená pro kolečko
 
 TEXT_COLOR = "white"
 DISPLAY_MS = 400  # Jak dlouho bublina zůstane (ms)
+MAX_TYPED_CHARS = 15
+OVERLAY_IDLE_SECONDS = 5.0
+OVERLAY_BG_COLOR = "#FFD400"
+OVERLAY_TEXT_COLOR = "black"
 
-# Inicializace fronty a zvuku
+# Inicializace fronty a zvuku ěšě+š3213
 msg_queue = queue.Queue()
 pygame.mixer.init()
+
+pressed_modifiers = set()
+
+typed_chars = []
+# Klávesové překryvné okno vlevo nahoře
+overlay_window = None
+overlay_text_var = None
+last_key_event_at = 0.0
+
+# XKB/xmodmap layout cache
+xkb_layout = {}
+
+
+def is_modifier_key(key):
+    return key in {
+        keyboard.Key.ctrl,
+        keyboard.Key.ctrl_l,
+        keyboard.Key.ctrl_r,
+        keyboard.Key.alt,
+        keyboard.Key.alt_l,
+        keyboard.Key.alt_r,
+        keyboard.Key.shift,
+        keyboard.Key.shift_l,
+        keyboard.Key.shift_r,
+        keyboard.Key.cmd,
+        keyboard.Key.cmd_l,
+        keyboard.Key.cmd_r,
+    }
+
+
+def modifier_name(key):
+    if key in {keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r}:
+        return "Ctrl"
+    if key in {keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r}:
+        return "Alt"
+    if key in {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r}:
+        return "Shift"
+    if key in {keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r}:
+        return "Cmd"
+    return None
+
+
+def normalized_modifier_order(modifiers):
+    order = ["Ctrl", "Alt", "Shift", "Cmd"]
+    return [name for name in order if name in modifiers]
+
+
+def load_xkb_layout():
+    """Nacte aktualni layout z xmodmap na Linuxu."""
+    global xkb_layout
+    if sys.platform != "linux":
+        return {}
+    try:
+        result = subprocess.run(["xmodmap", "-pke"], capture_output=True, text=True, timeout=2)
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                # Formatrovani linek vypadá: "keycode 24 = q Q ..."
+                parts = line.split()
+                if len(parts) >= 4 and parts[0] == "keycode":
+                    try:
+                        vk = int(parts[1])
+                        char = parts[3]  # Vlastní znak bez modifikátoru
+                        xkb_layout[vk] = char
+                    except (ValueError, IndexError):
+                        pass
+    except Exception:
+        pass
+    return xkb_layout
+
+def get_char_from_layout(key):
+    """Ziska znak ze nacteho XKB layoutu (Linux)."""
+    if sys.platform != "linux":
+        return None
+    try:
+        if hasattr(key, "vk") and key.vk is not None:
+            if key.vk in xkb_layout:
+                return xkb_layout[key.vk]
+    except Exception:
+        pass
+    return None
+
+def plain_key_text(key):
+    if isinstance(key, keyboard.KeyCode) and key.char is not None:
+        ch = key.char
+        # Bereme jen tisknutelne znaky z aktivniho layoutu.
+        return ch if ch.isprintable() else None
+    
+    # Zkusime fallback pro neobvicle znaky (Czech, etc.)
+    fallback = get_char_from_layout(key)
+    if fallback:
+        return fallback
+    
+    special = {
+        keyboard.Key.space: " ",
+        keyboard.Key.enter: "[Enter]",
+        keyboard.Key.tab: "[Tab]",
+        keyboard.Key.esc: "[Esc]",
+    }
+    return special.get(key)
+
+
+def combo_key_text(key):
+    if isinstance(key, keyboard.KeyCode) and key.char is not None:
+        ch = key.char
+
+        # Pri Ctrl+<pismeno> vraci OS casto ridici kod (1..26),
+        # prevedeme ho na pismeno, aby se zobrazilo napr. Ctrl+C.
+        if len(ch) == 1 and 1 <= ord(ch) <= 26:
+            ch = chr(ord('a') + ord(ch) - 1)
+
+        # Pynput vraci znak podle aktivniho layoutu (CZ/EN), ten zachovame.
+        # Velke pismeno delame jen pro pismena v kombinacich typu Ctrl+C.
+        if not ch.isprintable():
+            return None
+        return ch.upper() if len(ch) == 1 and ch.isalpha() else ch
+    special = {
+        keyboard.Key.space: "Space",
+        keyboard.Key.enter: "Enter",
+        keyboard.Key.tab: "Tab",
+        keyboard.Key.backspace: "Backspace",
+        keyboard.Key.delete: "Delete",
+        keyboard.Key.up: "Up",
+        keyboard.Key.down: "Down",
+        keyboard.Key.left: "Left",
+        keyboard.Key.right: "Right",
+        keyboard.Key.esc: "Esc",
+    }
+    return special.get(key)
+
+
+def create_overlay(root):
+    global overlay_window, overlay_text_var
+
+    top = tk.Toplevel(root)
+    top.overrideredirect(True)
+    top.attributes("-topmost", True)
+    top.geometry("+10+10")
+    top.configure(bg=OVERLAY_BG_COLOR)
+    top.withdraw()
+
+    overlay_text_var = tk.StringVar(value="")
+
+    text_label = tk.Label(
+        top,
+        textvariable=overlay_text_var,
+        bg=OVERLAY_BG_COLOR,
+        fg=OVERLAY_TEXT_COLOR,
+        font=("Arial", 11, "bold"),
+        anchor="w",
+        justify="left",
+        padx=8,
+        pady=6,
+    )
+    text_label.pack(fill="x")
+
+    overlay_window = top
+
+
+def show_overlay_text(text):
+    if overlay_window is None or overlay_text_var is None:
+        return
+    overlay_text_var.set(text)
+    overlay_window.deiconify()
+
+
+def hide_overlay():
+    global last_key_event_at
+    if overlay_window is None:
+        return
+    overlay_window.withdraw()
+    # Reset historie znaků, aby se po skryti zobrazy jen nove znaky.
+    typed_chars.clear()
+    last_key_event_at = 0.0
 
 def play_sound(sound_file):
     try:
@@ -45,6 +228,9 @@ def create_bubble(x, y, text, color):
 
 def check_queue(root):
     """Pravidelně kontroluje frontu, jestli někdo nekliknul."""
+    global last_key_event_at
+
+    now = time.time()
     try:
         while True:
             event_data = msg_queue.get_nowait()
@@ -63,8 +249,30 @@ def check_queue(root):
                 text = "↑ Scroll Up" if direction > 0 else "↓ Scroll Down"
                 create_bubble(x, y, text, SCROLL_COLOR)
                 play_sound(SCROLL_SOUND_FILE)
+            elif event_type == 'key_backspace':
+                if typed_chars:
+                    typed_chars.pop()
+                show_overlay_text("".join(typed_chars))
+                last_key_event_at = now
+                play_sound(KEY_SOUND_FILE)
+            elif event_type == 'key_combo':
+                typed_chars.clear()
+                show_overlay_text(event_data['text'])
+                last_key_event_at = now
+                play_sound(KEY_SOUND_FILE)
+            elif event_type == 'key_plain':
+                typed_chars.append(event_data['text'])
+                del typed_chars[:-MAX_TYPED_CHARS]
+                show_overlay_text("".join(typed_chars))
+                last_key_event_at = now
+                play_sound(KEY_SOUND_FILE)
     except queue.Empty:
         pass
+
+    if last_key_event_at and (now - last_key_event_at) > OVERLAY_IDLE_SECONDS:
+        hide_overlay()
+        last_key_event_at = 0.0
+
     # Zkontroluj znovu za 10ms
     root.after(10, lambda: check_queue(root))
 
@@ -80,19 +288,73 @@ def on_scroll(x, y, dx, dy):
     # dy > 0 znamená scroll nahoru, dy < 0 znamená scroll dolů
     msg_queue.put({'type': 'scroll', 'x': x, 'y': y, 'direction': dy})
 
+
+def on_key_press(key):
+    global typed_chars, last_key_event_at
+    
+    if is_modifier_key(key):
+        name = modifier_name(key)
+        if name:
+            pressed_modifiers.add(name)
+        return
+
+    # Backspace: vždy smazat poslední znak, bez ohledu na aktivní modifikátory.
+    # (AltGr na CZ klávesnici se sleduje jako "Alt" a bez tohoto pravidla
+    #  by uvíznutý AltGr zablokoval mazání.)
+    if key == keyboard.Key.backspace:
+        msg_queue.put({'type': 'key_backspace', 'x': 0, 'y': 0})
+        return
+
+    key_text_for_combo = combo_key_text(key)
+    if not key_text_for_combo:
+        return
+
+    modifiers = normalized_modifier_order(pressed_modifiers)
+    shift_only = modifiers and all(mod == "Shift" for mod in modifiers)
+
+    # Shift + znak je psani (napr. A, :, ?), ne klavesova zkratka.
+    if modifiers and not shift_only:
+        combo = "+".join(modifiers + [key_text_for_combo])
+        msg_queue.put({'type': 'key_combo', 'text': combo, 'x': 0, 'y': 0})
+        return
+
+    plain_text = plain_key_text(key)
+    if plain_text:
+        msg_queue.put({'type': 'key_plain', 'text': plain_text, 'x': 0, 'y': 0})
+
+
+def on_key_release(key):
+    if is_modifier_key(key):
+        name = modifier_name(key)
+        if name in pressed_modifiers:
+            pressed_modifiers.remove(name)
+
 # --- HLAVNÍ ČÁST PROGRAMU ---
 root = tk.Tk()
 root.withdraw() # Skryje hlavní okno, chceme jen bubliny
+
+# Nacteme XKB layout hned na zaceku
+if sys.platform == "linux":
+    load_xkb_layout()
+
+create_overlay(root)
 
 # Spuštění sledování myši v pozadí (Daemon=True zajistí vypnutí s programem)
 listener = mouse.Listener(on_click=on_click, on_scroll=on_scroll)
 listener.daemon = True
 listener.start()
 
+keyboard_listener = keyboard.Listener(on_press=on_key_press, on_release=on_key_release)
+keyboard_listener.daemon = True
+keyboard_listener.start()
+
 print("Sleduju myš... Pro ukončení zavři terminál nebo stiskni Ctrl+C.")
 print("  - Levé tlačítko: červená bublina")
 print("  - Pravé tlačítko: modrá bublina")
 print("  - Kolečko myši: zelená bublina")
+print("  - Klávesy: přehled vlevo nahoře + krátké tuknutí")
+if os.environ.get("WAYLAND_DISPLAY"):
+    print("  - Pozn.: Ve Waylandu je globalni odchyt klaves omezeny nastavenim compositoru.")
 
 # Spuštění kontrolní smyčky pro frontu
 check_queue(root)
