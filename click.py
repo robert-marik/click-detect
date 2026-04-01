@@ -6,8 +6,6 @@ import pygame
 import queue
 import time
 import os
-import subprocess
-import sys
 
 # --- KONFIGURACE ---
 CLICK_SOUND_FILE = "click.wav"
@@ -33,13 +31,9 @@ pygame.mixer.init()
 pressed_modifiers = set()
 
 typed_chars = []
-# Klávesové překryvné okno vlevo nahoře
 overlay_window = None
 overlay_text_var = None
 last_key_event_at = 0.0
-
-# XKB/xmodmap layout cache
-xkb_layout = {}
 
 
 def is_modifier_key(key):
@@ -76,50 +70,10 @@ def normalized_modifier_order(modifiers):
     return [name for name in order if name in modifiers]
 
 
-def load_xkb_layout():
-    """Nacte aktualni layout z xmodmap na Linuxu."""
-    global xkb_layout
-    if sys.platform != "linux":
-        return {}
-    try:
-        result = subprocess.run(["xmodmap", "-pke"], capture_output=True, text=True, timeout=2)
-        if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                # Formatrovani linek vypadá: "keycode 24 = q Q ..."
-                parts = line.split()
-                if len(parts) >= 4 and parts[0] == "keycode":
-                    try:
-                        vk = int(parts[1])
-                        char = parts[3]  # Vlastní znak bez modifikátoru
-                        xkb_layout[vk] = char
-                    except (ValueError, IndexError):
-                        pass
-    except Exception:
-        pass
-    return xkb_layout
-
-def get_char_from_layout(key):
-    """Ziska znak ze nacteho XKB layoutu (Linux)."""
-    if sys.platform != "linux":
-        return None
-    try:
-        if hasattr(key, "vk") and key.vk is not None:
-            if key.vk in xkb_layout:
-                return xkb_layout[key.vk]
-    except Exception:
-        pass
-    return None
-
 def plain_key_text(key):
+    """Ziska tisknutelny znak z klavesu."""
     if isinstance(key, keyboard.KeyCode) and key.char is not None:
-        ch = key.char
-        # Bereme jen tisknutelne znaky z aktivniho layoutu.
-        return ch if ch.isprintable() else None
-    
-    # Zkusime fallback pro neobvicle znaky (Czech, etc.)
-    fallback = get_char_from_layout(key)
-    if fallback:
-        return fallback
+        return key.char if key.char.isprintable() else None
     
     special = {
         keyboard.Key.space: " ",
@@ -131,24 +85,19 @@ def plain_key_text(key):
 
 
 def combo_key_text(key):
+    """Ziska jmeno klavesu pro kombinace (Ctrl+C, Alt+F4, atd.)."""
     if isinstance(key, keyboard.KeyCode) and key.char is not None:
         ch = key.char
-
-        # Pri Ctrl+<pismeno> vraci OS casto ridici kod (1..26),
-        # prevedeme ho na pismeno, aby se zobrazilo napr. Ctrl+C.
+        # Ctrl+<pismeno> vraci ridici kod (1-26), prevedeme na pismeno
         if len(ch) == 1 and 1 <= ord(ch) <= 26:
             ch = chr(ord('a') + ord(ch) - 1)
-
-        # Pynput vraci znak podle aktivniho layoutu (CZ/EN), ten zachovame.
-        # Velke pismeno delame jen pro pismena v kombinacich typu Ctrl+C.
-        if not ch.isprintable():
-            return None
-        return ch.upper() if len(ch) == 1 and ch.isalpha() else ch
+        # Zobrazime velke pismeno pro kombinace
+        return ch.upper() if ch.isalpha() else ch if ch.isprintable() else None
+    
     special = {
         keyboard.Key.space: "Space",
         keyboard.Key.enter: "Enter",
         keyboard.Key.tab: "Tab",
-        keyboard.Key.backspace: "Backspace",
         keyboard.Key.delete: "Delete",
         keyboard.Key.up: "Up",
         keyboard.Key.down: "Down",
@@ -331,12 +280,7 @@ def on_key_release(key):
 
 # --- HLAVNÍ ČÁST PROGRAMU ---
 root = tk.Tk()
-root.withdraw() # Skryje hlavní okno, chceme jen bubliny
-
-# Nacteme XKB layout hned na zaceku
-if sys.platform == "linux":
-    load_xkb_layout()
-
+root.withdraw()
 create_overlay(root)
 
 # Spuštění sledování myši v pozadí (Daemon=True zajistí vypnutí s programem)
@@ -348,13 +292,9 @@ keyboard_listener = keyboard.Listener(on_press=on_key_press, on_release=on_key_r
 keyboard_listener.daemon = True
 keyboard_listener.start()
 
-print("Sleduju myš... Pro ukončení zavři terminál nebo stiskni Ctrl+C.")
-print("  - Levé tlačítko: červená bublina")
-print("  - Pravé tlačítko: modrá bublina")
-print("  - Kolečko myši: zelená bublina")
-print("  - Klávesy: přehled vlevo nahoře + krátké tuknutí")
+print("Sleduju myš a klávesy. Pro ukončení stiskni Ctrl+C v terminálu.")
 if os.environ.get("WAYLAND_DISPLAY"):
-    print("  - Pozn.: Ve Waylandu je globalni odchyt klaves omezeny nastavenim compositoru.")
+    print("Pozn.: Ve Waylandu je globální odchyt kláves omezen compositor-em.")
 
 # Spuštění kontrolní smyčky pro frontu
 check_queue(root)
