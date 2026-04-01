@@ -10,7 +10,7 @@ import os
 # --- KONFIGURACE ---
 CLICK_SOUND_FILE = "click.wav"
 SCROLL_SOUND_FILE = "scroll.wav"
-KEY_SOUND_FILE = "click.wav"
+KEY_SOUND_FILE = "presskey.wav"
 
 # Barvy pro různé typy událostí
 LEFT_CLICK_COLOR = "#FF5733"   # Červená pro levé tlačítko
@@ -23,6 +23,7 @@ MAX_TYPED_CHARS = 15
 OVERLAY_IDLE_SECONDS = 5.0
 OVERLAY_BG_COLOR = "#FFD400"
 OVERLAY_TEXT_COLOR = "black"
+FONTSIZE=20
 
 # Inicializace fronty a zvuku ěšě+š3213
 msg_queue = queue.Queue()
@@ -140,7 +141,7 @@ def create_overlay(root):
         textvariable=overlay_text_var,
         bg=OVERLAY_BG_COLOR,
         fg=OVERLAY_TEXT_COLOR,
-        font=("Arial", 11, "bold"),
+        font=("Arial", FONTSIZE, "bold"),
         anchor="w",
         justify="left",
         padx=8,
@@ -184,7 +185,7 @@ def create_bubble(x, y, text, color):
     top.geometry(f"+{int(x+10)}+{int(y+10)}")
     
     lbl = tk.Label(top, text=text, bg=color, fg=TEXT_COLOR, 
-                   font=("Arial", 10, "bold"), padx=6, pady=3)
+                   font=("Arial", FONTSIZE, "bold"), padx=6, pady=3)
     lbl.pack()
     
     # Klíč k úspěchu: Okno se samo zničí po uplynutí času
